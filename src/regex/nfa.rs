@@ -161,11 +161,20 @@ impl Nfas {
         }
     }
 
-    pub fn build_nfa(&mut self, regex_str: &str) -> NfaPaired {
-        let x = self.new_unit(Transform::Trans('a'));
-        self.into_kleene(x)
-        // only for test
-
+    pub fn build_nfa(&mut self, _regex_str: &str) -> NfaPaired {
+        let a = self.new_unit(Transform::Trans('a'));
+        let b = self.new_unit(Transform::Trans('b'));
+        let u1 = self.union(a, b);
+        let k1 = self.into_kleene(u1);
+        let c = self.new_unit(Transform::Trans('c'));
+        let d = self.new_unit(Transform::Trans('d'));
+        let e = self.new_unit(Transform::Trans('e'));
+        let u2 = self.union(d, e);
+        let k2 = self.into_kleene(u2);
+        let tmp = self.concat(c, k2);
+        let full = self.concat(k1, tmp);
+        // only for test: (a|b)*c(de)*
+        full
         // TODO: build NFA from a given regex expression
     }
 }

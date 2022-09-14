@@ -1,28 +1,21 @@
 pub mod regex;
+use std::io;
+
 use regex::Regex;
 fn main() {
-    let mut machine = Regex::new("114");
-    // machine.init_current_state(&mut v);
-    // machine.add2current_state(1, &mut v);
-    println!(
-        "Matching Result: {:?}",
-        machine.bfs_match("abababbabababababcdedede")
-    );
-    println!(
-        "Matching Result: {:?}",
-        machine.bfs_match("abababbabababababccdedede")
-    );
-    println!(
-        "Matching Result: {:?}",
-        machine.bfs_match("ababgabbabababababcddedede")
-    );
-    println!(
-        "Matching Result: {:?}",
-        machine.bfs_match("ababgabbabababababcdeded")
-    );
-    println!(
-        "Matching Result: {:?}",
-        machine.bfs_match("ababbababaabbabababababc")
-    );
-    println!("Matching Result: {:?}", machine.bfs_match("c"));
+    println!("Your regex exp:");
+    let mut regex_exp = String::new();
+    io::stdin()
+        .read_line(&mut regex_exp)
+        .expect("failed to read line.");
+    let mut machine = Regex::new(&regex_exp);
+
+    loop {
+        println!("Your string to match:");
+        let mut be_matched = String::new();
+        io::stdin()
+            .read_line(&mut be_matched)
+            .expect("failed to read line.");
+        println!("Result: {}", machine.bfs_match(&be_matched));
+    }
 }

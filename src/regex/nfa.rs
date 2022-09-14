@@ -1,3 +1,5 @@
+use std::{default, process::exit, vec};
+
 pub type NfaNodeHandle = usize;
 
 #[derive(Debug, Clone, Copy)]
@@ -150,7 +152,7 @@ impl Nfas {
         let end = self.new_node(true);
 
         self.nodes[start].edge1 = Some(Edge::new(nfa.start, Transform::Epsilon));
-        self.nodes[start].edge1 = Some(Edge::new(end, Transform::Epsilon));
+        self.nodes[start].edge2 = Some(Edge::new(end, Transform::Epsilon));
         self.nodes[nfa.end].edge1 = Some(Edge::new(end, Transform::Epsilon));
 
         self.nodes[nfa.end].is_end = false;
@@ -160,21 +162,104 @@ impl Nfas {
             end: end,
         }
     }
+    pub fn init_nfa(&mut self) -> NfaPaired {
+        let init_node = self.new_node(false);
+        NfaPaired {
+            start: init_node,
+            end: init_node,
+        }
+    }
+    pub fn build_nfa(&mut self, regex_exp: &str) -> NfaPaired {
 
-    pub fn build_nfa(&mut self, _regex_str: &str) -> NfaPaired {
-        let a = self.new_unit(Transform::Trans('a'));
-        let b = self.new_unit(Transform::Trans('b'));
-        let u1 = self.union(a, b);
-        let k1 = self.into_kleene(u1);
-        let c = self.new_unit(Transform::Trans('c'));
-        let d = self.new_unit(Transform::Trans('d'));
-        let e = self.new_unit(Transform::Trans('e'));
-        let u2 = self.union(d, e);
-        let k2 = self.into_kleene(u2);
-        let tmp = self.concat(c, k2);
-        let full = self.concat(k1, tmp);
-        // only for test: (a|b)*c(de)*
-        full
-        // TODO: build NFA from a given regex expression
+        fn to_suffix(regex_exp: &str) -> String {
+            fn get_priority(op: char) -> usize {
+                match op {
+                    '*' => 3,
+                    '+' => 3,
+                    '?' => 3,
+                    '.' => 2,
+                    '|' => 1,
+                    '(' => 0,
+                    _ => 0,
+                }
+            }
+            let mut suffix_out = String::with_capacity(2 * regex_exp.len());
+            let mut concat_flag = false; // Represents if the implicit concatenation op should be added now.
+            let mut op_stack: Vec<char> = vec![];
+            let op_get_in = |ch: char, op_stack: &mut Vec<char>, suffix_out: &mut String| {
+                if ch != '(' {
+                    while get_priority(*op_stack.last().unwrap_or(&' ')) > get_priority(ch) {
+                        suffix_out.push(op_stack.pop().unwrap());
+                    }
+                }
+
+                op_stack.push(ch);
+            };
+            for ch in regex_exp.chars().into_iter() {
+                if ch == '(' {
+                    if concat_flag {
+                        op_get_in('.', &mut op_stack, &mut suffix_out);
+                    }
+                    op_get_in(ch, &mut op_stack, &mut suffix_out);
+                    concat_flag = false;
+                } else if ch == '*' || ch == '+' || ch == '|' || ch == '?'{
+                    op_get_in(ch, &mut op_stack, &mut suffix_out);
+                    if ch != '*' && ch != '+' && ch != '?' {
+                        concat_flag = false;
+                    }
+                } else if ch == ')' {
+                    while *op_stack.last().unwrap() != '(' {
+                        suffix_out.push(op_stack.pop().unwrap());
+                    }
+                    assert_eq!(op_stack.pop(), Some('('));
+                    concat_flag = true;
+                } else {
+                    // normal chars
+                    if concat_flag {
+                        op_get_in('.', &mut op_stack, &mut suffix_out);
+                    }
+                    concat_flag = true;
+                    suffix_out.push(ch);
+                }
+            }
+            while !op_stack.is_empty() {
+                suffix_out.push(op_stack.pop().unwrap());
+            }
+            suffix_out
+        }
+        // First, convert to suffix expression
+        let suffix_exp = to_suffix(regex_exp);
+        // println!("suffix:{}", suffix_exp);
+        let mut oprands: Vec<NfaPaired> = vec![];
+        for ch in suffix_exp.chars() {
+            match ch {
+                '+' => {
+                    let nfa = oprands.pop().unwrap();
+                    oprands.push(self.into_positive(nfa));
+                },
+                '*' => {
+                    let nfa = oprands.pop().unwrap();
+                    oprands.push(self.into_kleene(nfa));
+                },
+                '?' => {
+                    let nfa = oprands.pop().unwrap();
+                    oprands.push(self.into_option(nfa));
+                },
+                '|' => {
+                    let nfa2 = oprands.pop().unwrap();
+                    let nfa1 = oprands.pop().unwrap();
+                    oprands.push(self.union(nfa1, nfa2));
+                },
+                '.' => {
+                    let nfa2 = oprands.pop().unwrap();
+                    let nfa1 = oprands.pop().unwrap();
+                    oprands.push(self.concat(nfa1, nfa2));
+                },
+                normal_char => {
+                    oprands.push(self.new_unit(Transform::Trans(normal_char)));
+                },
+            }
+        }
+        oprands.pop().unwrap()
     }
 }
